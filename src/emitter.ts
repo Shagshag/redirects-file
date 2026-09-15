@@ -6,7 +6,10 @@ import { joinSegments } from "@quartz-community/types";
 export interface RedirectRule {
   /** Slug (no leading slash) of the URL to redirect FROM. */
   from: string;
-  /** Slug (no leading slash) of the URL to redirect TO. */
+  /**
+   * Slug (no leading slash) of the URL to redirect TO, or a full URL
+   * (e.g. `"https://example.com/new-page"`) to redirect to a different site.
+   */
   to: string;
   /** HTTP status code. @default 301 */
   status?: number;
@@ -65,9 +68,27 @@ function encodePath(slug: string): string {
   return encodeURI(slug.replace(/^\/+/, ""));
 }
 
+/**
+ * A redirect `to` may be a full URL (`isAbsoluteTarget`), not just a path on
+ * this site -- Netlify-style _redirects supports redirecting to a different
+ * host. Those must be encoded and used as-is, without the leading `/` that
+ * `from` (always a local path) and a local `to` both need.
+ */
+function isAbsoluteTarget(target: string): boolean {
+  return /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(target) || target.startsWith("//");
+}
+
+function formatFrom(from: string): string {
+  return `/${encodePath(from)}`;
+}
+
+function formatTo(to: string): string {
+  return isAbsoluteTarget(to) ? encodeURI(to) : `/${encodePath(to)}`;
+}
+
 function redirectsFileContents(options: Options): string {
   const specificRules = options.redirects.map(
-    (rule) => `/${encodePath(rule.from)} /${encodePath(rule.to)} ${rule.status ?? 301}`,
+    (rule) => `${formatFrom(rule.from)} ${formatTo(rule.to)} ${rule.status ?? 301}`,
   );
   const lines = [...specificRules];
   if (options.catchAllRewrite) {
@@ -82,7 +103,14 @@ function redirectsFileContents(options: Options): string {
  * ...). See the `Options` fields above for what it can do.
  */
 export const RedirectsFile: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
-  const options = { ...defaultOptions, ...opts };
+  // Field-by-field, not `{ ...defaultOptions, ...opts }`: plugin options
+  // come from YAML, unchecked at runtime, so an explicit `redirects: null`/
+  // empty key in quartz.config.yaml must fall back to the default array
+  // rather than overwrite it and crash `.map()` below.
+  const options: Options = {
+    catchAllRewrite: opts?.catchAllRewrite ?? defaultOptions.catchAllRewrite,
+    redirects: opts?.redirects ?? defaultOptions.redirects,
+  };
 
   return {
     name: "RedirectsFile",

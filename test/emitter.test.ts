@@ -120,6 +120,39 @@ describe("RedirectsFile", () => {
     expect(contents.split("\n")[0]).toBe("/old-page /new-page 301");
   });
 
+  it("does not prefix an absolute URL destination with a slash", async () => {
+    const plugin = RedirectsFile({
+      redirects: [{ from: "old-dashboard", to: "https://example.com/new-dashboard" }],
+    });
+    for await (const _fp of plugin.emit(ctx, [], {} as never) as AsyncGenerator<FilePath>) {
+      // drain
+    }
+    const contents = await readRedirects(tmpDir);
+    expect(contents.split("\n")[0]).toBe("/old-dashboard https://example.com/new-dashboard 301");
+  });
+
+  it("treats a protocol-relative destination as absolute too", async () => {
+    const plugin = RedirectsFile({
+      redirects: [{ from: "old-page", to: "//example.com/new-page" }],
+    });
+    for await (const _fp of plugin.emit(ctx, [], {} as never) as AsyncGenerator<FilePath>) {
+      // drain
+    }
+    const contents = await readRedirects(tmpDir);
+    expect(contents.split("\n")[0]).toBe("/old-page //example.com/new-page 301");
+  });
+
+  it("falls back to the default empty redirect list when options.redirects is null", async () => {
+    const plugin = RedirectsFile({ redirects: null as unknown as undefined });
+    const emitted: FilePath[] = [];
+    for await (const fp of plugin.emit(ctx, [], {} as never) as AsyncGenerator<FilePath>) {
+      emitted.push(fp);
+    }
+    expect(emitted).toHaveLength(1);
+    const contents = await readRedirects(tmpDir);
+    expect(contents).toBe("/*  /:splat.html  200\n");
+  });
+
   it("writes multiple rules in the given order", async () => {
     const plugin = RedirectsFile({
       redirects: [

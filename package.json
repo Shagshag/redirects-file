@@ -1,6 +1,6 @@
 {
   "name": "redirects-file",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Emits a Netlify-style _redirects file: a catch-all pretty-URL rewrite plus your own explicit redirect rules.",
   "type": "module",
   "license": "MIT",
@@ -63,7 +63,7 @@
     "name": "redirects-file",
     "displayName": "Redirects File",
     "category": "emitter",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "quartzVersion": ">=5.0.0",
     "dependencies": [],
     "defaultOrder": 50,

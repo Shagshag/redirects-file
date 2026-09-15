@@ -28,7 +28,7 @@ plugins:
           status: 302
 ```
 
-`from`/`to` are plain slugs without a leading slash (e.g. `"développement/mon-article"`) — write them exactly as they'd appear in a URL, not pre-encoded. The plugin URL-encodes them the way a browser actually sends a path (not `encodeURIComponent`, which over-escapes characters like `,` and `'` that are valid unencoded in a URL path and that browsers leave alone).
+`from` is a plain slug without a leading slash (e.g. `"développement/mon-article"`) — write it exactly as it'd appear in a URL, not pre-encoded. `to` can be a slug the same way, or a full URL (`"https://example.com/new-page"`) to redirect to a different site. The plugin URL-encodes both the way a browser actually sends a path (not `encodeURIComponent`, which over-escapes characters like `,` and `'` that are valid unencoded in a URL path and that browsers leave alone).
 
 Rules are written to `_redirects` in the order given, ahead of the catch-all rewrite; matching is first-rule-wins, so put more specific rules before more general ones.
 
