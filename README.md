@@ -38,6 +38,19 @@ Rules are written to `_redirects` in the order given, ahead of the catch-all rew
 | ----------------- | ---------------- | ------- | --------------------------------------------------------------------------------------------- |
 | `catchAllRewrite` | `boolean`        | `true`  | Emit the `/* /:splat.html 200` pretty-URL rewrite described above.                            |
 | `redirects`       | `RedirectRule[]` | `[]`    | Explicit rules: `{ from: string, to: string, status?: number }` (`status` defaults to `301`). |
+| `aliases`         | `boolean`        | `false` | Also emit a 301 for each frontmatter `aliases` entry, pointing to its page (see below).       |
+
+## Frontmatter aliases
+
+With `aliases: true`, every entry of a page's frontmatter `aliases` becomes a server-side 301 to that page, written after your explicit `redirects` and before the catch-all. Relative aliases (`./x`) resolve against the page, and an index page redirects to its folder URL (`home/index` → `/home/`). An alias that is itself a real page, or already the `from` of an explicit rule, is skipped.
+
+```yaml
+- source: github:Shagshag/redirects-file
+  options:
+    aliases: true
+```
+
+Aliases are collected during full builds only; in `--serve` incremental rebuilds `_redirects` is not rewritten. This is a server-side alternative to the HTML meta-refresh pages of [`alias-redirects`](https://github.com/quartz-community/alias-redirects); you can use both.
 
 ## Documentation
 

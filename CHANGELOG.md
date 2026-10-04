@@ -1,5 +1,9 @@
 # redirects-file
 
+## 0.2.0
+
+- New `aliases` option (default `false`): also emit a 301 for every frontmatter `aliases` entry, pointing to the page. Relative aliases resolve against the page; aliases that are real pages or already explicit rules are skipped.
+
 ## 0.1.1
 
 Bug fixes found in review:

@@ -1,6 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { QuartzEmitterPlugin, BuildCtx, FilePath } from "@quartz-community/types";
+import type {
+  QuartzEmitterPlugin,
+  BuildCtx,
+  FilePath,
+  ProcessedContent,
+} from "@quartz-community/types";
 import { joinSegments } from "@quartz-community/types";
 
 export interface RedirectRule {
@@ -45,11 +50,25 @@ interface Options {
    * @default []
    */
   redirects: RedirectRule[];
+
+  /**
+   * Also emit a redirect for every entry of a page's frontmatter `aliases`,
+   * pointing to that page. Written after the explicit `redirects` and before
+   * the catch-all. An alias that equals the slug of a real page, or that is
+   * already the `from` of an explicit rule, is skipped.
+   *
+   * Aliases are only collected during a full build: in `--serve` incremental
+   * rebuilds the file is not rewritten, so restart the build to see changes.
+   *
+   * @default false
+   */
+  aliases: boolean;
 }
 
 const defaultOptions: Options = {
   catchAllRewrite: true,
   redirects: [],
+  aliases: false,
 };
 
 /**
@@ -86,8 +105,8 @@ function formatTo(to: string): string {
   return isAbsoluteTarget(to) ? encodeURI(to) : `/${encodePath(to)}`;
 }
 
-function redirectsFileContents(options: Options): string {
-  const specificRules = options.redirects.map(
+function redirectsFileContents(options: Options, aliasRules: RedirectRule[] = []): string {
+  const specificRules = [...options.redirects, ...aliasRules].map(
     (rule) => `${formatFrom(rule.from)} ${formatTo(rule.to)} ${rule.status ?? 301}`,
   );
   const lines = [...specificRules];
@@ -95,6 +114,50 @@ function redirectsFileContents(options: Options): string {
     lines.push("/*  /:splat.html  200");
   }
   return lines.length > 0 ? lines.join("\n") + "\n" : "";
+}
+
+/** Folder index pages live at the folder URL: `home/index` -> `home/`, `index` -> ``. */
+function canonicalPath(slug: string): string {
+  const segments = slug.split("/");
+  if (segments[segments.length - 1] !== "index") return slug;
+  segments.pop();
+  return segments.length > 0 ? segments.join("/") + "/" : "";
+}
+
+function isRelative(alias: string): boolean {
+  return alias.startsWith("./") || alias.startsWith("../");
+}
+
+/**
+ * Turns frontmatter `aliases` into redirect rules. Relative aliases (`./x`,
+ * `../x`) resolve against the page's own slug, like the alias-redirects plugin.
+ */
+function collectAliasRules(content: ProcessedContent[], explicit: RedirectRule[]): RedirectRule[] {
+  const pageSlugs = new Set<string>();
+  for (const [, file] of content) {
+    const slug = file.data.slug as string | undefined;
+    if (slug) pageSlugs.add(slug);
+  }
+  const taken = new Set(explicit.map((rule) => rule.from.replace(/^\/+/, "")));
+  const rules: RedirectRule[] = [];
+
+  for (const [, file] of content) {
+    const slug = file.data.slug as string | undefined;
+    const aliases = (file.data as Record<string, unknown>).aliases;
+    if (!slug || !Array.isArray(aliases)) continue;
+
+    const to = canonicalPath(slug);
+    for (const alias of aliases) {
+      if (typeof alias !== "string") continue;
+      const from = (
+        isRelative(alias) ? path.posix.normalize(path.posix.join(slug, "..", alias)) : alias
+      ).replace(/^\/+|\/+$/g, "");
+      if (!from || pageSlugs.has(from) || taken.has(from)) continue;
+      taken.add(from);
+      rules.push({ from, to });
+    }
+  }
+  return rules;
 }
 
 /**
@@ -110,14 +173,21 @@ export const RedirectsFile: QuartzEmitterPlugin<Partial<Options>> = (opts) => {
   const options: Options = {
     catchAllRewrite: opts?.catchAllRewrite ?? defaultOptions.catchAllRewrite,
     redirects: opts?.redirects ?? defaultOptions.redirects,
+    aliases: opts?.aliases ?? defaultOptions.aliases,
   };
 
   return {
     name: "RedirectsFile",
-    async *emit(ctx: BuildCtx) {
+    async *emit(ctx: BuildCtx, content: ProcessedContent[]) {
       const dest = joinSegments(ctx.argv.output, "_redirects") as FilePath;
       await fs.mkdir(path.dirname(dest), { recursive: true });
-      await fs.writeFile(dest, redirectsFileContents(options));
+      await fs.writeFile(
+        dest,
+        redirectsFileContents(
+          options,
+          options.aliases ? collectAliasRules(content ?? [], options.redirects) : [],
+        ),
+      );
       yield dest;
     },
     async *partialEmit() {},

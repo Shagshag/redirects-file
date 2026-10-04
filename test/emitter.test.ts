@@ -180,4 +180,55 @@ describe("RedirectsFile", () => {
     }
     expect(emitted).toHaveLength(0);
   });
+
+  describe("aliases option", () => {
+    const page = (slug: string, aliases?: unknown) => [{}, { data: { slug, aliases } }] as never;
+    const run = async (opts: Parameters<typeof RedirectsFile>[0], content: unknown[]) => {
+      const plugin = RedirectsFile(opts);
+      for await (const _fp of plugin.emit(
+        ctx,
+        content as never,
+        {} as never,
+      ) as AsyncGenerator<FilePath>) {
+        // drain
+      }
+      return readRedirects(tmpDir);
+    };
+
+    it("ignores aliases by default", async () => {
+      expect(await run({}, [page("new-page", ["old-page"])])).toBe("/*  /:splat.html  200\n");
+    });
+
+    it("emits a 301 per alias, after explicit rules and before the catch-all", async () => {
+      const out = await run({ aliases: true, redirects: [{ from: "a", to: "b" }] }, [
+        page("développement/new-page", ["old page", "ancien/chemin"]),
+      ]);
+      expect(out).toBe(
+        "/a /b 301\n" +
+          "/old%20page /d%C3%A9veloppement/new-page 301\n" +
+          "/ancien/chemin /d%C3%A9veloppement/new-page 301\n" +
+          "/*  /:splat.html  200\n",
+      );
+    });
+
+    it("resolves relative aliases against the page and maps index pages to a folder URL", async () => {
+      const out = await run({ aliases: true }, [
+        page("dir/note", ["./sibling"]),
+        page("home/index", ["start"]),
+        page("index", ["accueil"]),
+      ]);
+      expect(out).toContain("/dir/sibling /dir/note 301");
+      expect(out).toContain("/start /home/ 301");
+      expect(out).toContain("/accueil / 301");
+    });
+
+    it("skips aliases that are real pages, explicit rules or duplicates, and ignores bad values", async () => {
+      const out = await run({ aliases: true, redirects: [{ from: "taken", to: "x" }] }, [
+        page("one", ["two", "taken", "dup", "one"]),
+        page("two", ["dup", 42]),
+        page("three", "not-an-array"),
+      ]);
+      expect(out).toBe("/taken /x 301\n/dup /one 301\n/*  /:splat.html  200\n");
+    });
+  });
 });
